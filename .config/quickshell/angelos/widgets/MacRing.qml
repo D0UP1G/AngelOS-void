@@ -77,7 +77,8 @@ Item {
         ShapePath {
             fillColor: "transparent"
             strokeColor: root.shown > 0.002 ? root.color : "transparent"
-            strokeGradient: root.shaded && root.shown > 0.002 ? sweep : null
+            // strokeGradient requires Qt >= 6.12; omitted for Qt 6.11 compatibility
+            // strokeGradient: root.shaded && root.shown > 0.002 ? sweep : null
             strokeWidth: root.lineWidth
             capStyle: ShapePath.RoundCap
             PathAngleArc {

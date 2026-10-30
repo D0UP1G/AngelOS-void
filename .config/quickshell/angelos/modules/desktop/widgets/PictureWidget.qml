@@ -34,6 +34,7 @@ Item {
     readonly property string file: st.file || ""
     readonly property bool video: !slideshow && /\.(mp4|webm|mkv|mov|m4v|avi)$/i.test(file)
     readonly property int loops: st.loops === undefined ? 0 : st.loops          // 0 = for ever
+    onLoopsChanged: replay()
     readonly property bool restOnLast: st.rest !== "first"
     readonly property int every: st.every || 0                                  // minutes, 0 = once
     // the longer side: the size picked, else an old widget's own number, else M
@@ -101,15 +102,17 @@ Item {
                 smooth: !root.sharp
                 mipmap: !root.sharp
                 fillMode: Image.PreserveAspectFit
-                loops: root.loops > 0 ? root.loops : AnimatedImage.Infinite
-                finishBehavior: root.restOnLast ? AnimatedImage.FinishAtFinalFrame : AnimatedImage.FinishAtInitialFrame
+                // loops and finishBehavior require Qt >= 6.12; omitted for Qt <= 6.11 compatibility
+                // loops: root.loops > 0 ? root.loops : AnimatedImage.Infinite
+                // finishBehavior: root.restOnLast ? AnimatedImage.FinishAtFinalFrame : AnimatedImage.FinishAtInitialFrame
                 playing: root.gifOk
                 paused: !root.seen
-                onFinished: if (root.every > 0)
-                    again.restart()
-                // a new file or new loops: from the start
+                onCurrentFrameChanged: {
+                    if (root.every > 0 && frameCount > 1 && currentFrame === frameCount - 1)
+                        again.restart()
+                }
+                // a new file: from the start
                 onSourceChanged: again.stop()
-                onLoopsChanged: root.replay()
                 // cache before the source: the picture loads once, the right way
                 Component.onCompleted: {
                     cache = root.cached;

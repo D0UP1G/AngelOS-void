@@ -8,6 +8,12 @@
 # author's repositories ([multilib] for Steam) are there by then
 install_gaming() {
   [[ "$INSTALL_GAMING" == 1 && "$SKIP_PACKAGES" != 1 ]] || return 0
+  if [[ "$PKG_MANAGER" == xbps ]]; then
+    warn "$(_ 'Gaming setup (game-setup.sh) is Arch-only. Install Steam manually: sudo xbps-install steam' \
+             'Игровая настройка (game-setup.sh) только для Arch. Steam вручную: sudo xbps-install steam')"
+    return 0
+  fi
+  # Arch/CachyOS: старый код без изменений
   command -v pacman >/dev/null 2>&1 || return 0
   local -a run=(env HOME="$HOME_DIR" ANGELOS_LANG="$UI" bash "$ROOT/.config/quickshell/angelos/scripts/game-setup.sh")
   # without a terminal nobody answers pacman: game-setup.sh adds --noconfirm when stdin isn't one

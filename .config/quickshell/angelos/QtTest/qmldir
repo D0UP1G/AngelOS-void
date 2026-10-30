@@ -1,0 +1,4 @@
+module QtTest
+TestEvent 1.0 TestEvent.qml
+SignalSpy 1.0 SignalSpy.qml
+TestCase 1.0 TestCase.qml

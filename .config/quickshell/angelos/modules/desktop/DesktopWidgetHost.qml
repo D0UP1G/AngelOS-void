@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtTest
 import Quickshell
 import qs.config
 import qs.services
@@ -363,8 +362,11 @@ Item {
         const t = targetAt(px, py, "clicked");
         return t && t.item.cursorShape !== undefined ? t.item.cursorShape : Qt.ArrowCursor;
     }
-    TestEvent {
+    Item {
         id: sim
+        function mousePress(item, x, y, btn, mod, delay) {}
+        function mouseMove(item, x, y, delay, btns) {}
+        function mouseRelease(item, x, y, btn, mod, delay) {}
     }
     // dev (`angelos widgetDrag uid dx dy ms`): a real drag by the title bar, replayed
     function devDrag(dx, dy, ms) {

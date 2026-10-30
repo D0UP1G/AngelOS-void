@@ -333,8 +333,22 @@ self_update() {
 case " $* " in *" -h "*|*" --help "*) ;; *) self_update "$@" ;; esac
 # ── /Self-update ─────────────────────────────────────────────────────────────
 
+source "$ROOT/installer/lib/core.sh"
+source "$ROOT/installer/lib/pkg.sh"
+detect_pkg_manager
+
+VOID_LIBC=""
+if [[ "$PKG_MANAGER" == xbps ]]; then
+  ldd --version 2>&1 | grep -qi musl && VOID_LIBC=musl || VOID_LIBC=glibc
+  if [[ "$VOID_LIBC" == musl ]]; then
+    warn "$(_ 'musl Void Linux: angel-niri prebuilt and Steam will not work; Quickshell will be built without WebEngine' \
+             'musl Void Linux: prebuilt angel-niri и Steam не работают; Quickshell будет собран без WebEngine')"
+  fi
+fi
+
 # the rest of the installer: installer/lib/*.sh, then installer/steps/*.sh in name order
 for _f in "$ROOT"/installer/lib/*.sh "$ROOT"/installer/steps/*.sh; do
+  [[ "$_f" == *"/core.sh" || "$_f" == *"/pkg.sh" ]] && continue
   # shellcheck source=/dev/null
   source "$_f"
 done
@@ -391,10 +405,10 @@ for i in "${!STEPS[@]}"; do
   ui_progress "$i" "${#STEPS[@]}" "$(_ "$en" "$ru")"
   CUR_STEP="$(_ "$en" "$ru")"
   _log "── $CUR_STEP"
-  [[ "$step" == pacman_install ]] && billboard
+  [[ "$step" == pacman_install || "$step" == install_packages ]] && billboard
   "$step"
   # the music waits for the packages: a fresh system has no sound server before them
-  [[ "$step" == pacman_install ]] && { show_init; music_start; }
+  [[ "$step" == pacman_install || "$step" == install_packages ]] && { show_init; music_start; }
 done
 CUR_STEP=""
 ui_progress "${#STEPS[@]}" "${#STEPS[@]}" "$(_ "stream complete $G_HEART" "стрим завершён $G_HEART")"

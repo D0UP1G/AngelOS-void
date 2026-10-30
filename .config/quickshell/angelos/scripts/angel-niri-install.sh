@@ -65,8 +65,12 @@ build() {
   if ! command -v cargo >/dev/null 2>&1 || ! command -v clang >/dev/null 2>&1; then
     # the installer keeps sudo fresh; elsewhere (no password cached) this just fails
     step "$(_ 'installing Rust and clang to build it' 'ставлю Rust и clang для сборки')"
-    sudo -n pacman -S --needed --noconfirm rust clang >/dev/null 2>&1 ||
-      return 1
+    if command -v xbps-install >/dev/null 2>&1; then
+      sudo xbps-install -y rust cargo clang >/dev/null 2>&1 || return 1
+    else
+      sudo -n pacman -S --needed --noconfirm rust clang >/dev/null 2>&1 ||
+        return 1
+    fi
   fi
   # rustup without a default toolchain answers nothing
   cargo --version >/dev/null 2>&1 || { command -v rustup >/dev/null 2>&1 && rustup default stable >/dev/null 2>&1; } || return 1
@@ -86,11 +90,14 @@ build() {
 
 use() {
   local bin="$1"
-  mkdir -p -- "${DROPIN%/*}" "${LINK%/*}"
-  printf '%s\n' "# angelOS: the session's niri is angel-niri (scripts/angel-niri-install.sh; off: angel-niri-install.sh off)" \
-    "[Service]" "ExecStart=" "ExecStart=$bin --session" >"$DROPIN"
+  if ! command -v xbps-install >/dev/null 2>&1; then
+    mkdir -p -- "${DROPIN%/*}"
+    printf '%s\n' "# angelOS: the session's niri is angel-niri (scripts/angel-niri-install.sh; off: angel-niri-install.sh off)" \
+      "[Service]" "ExecStart=" "ExecStart=$bin --session" >"$DROPIN"
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+  fi
+  mkdir -p -- "${LINK%/*}"
   ln -sfn -- "$bin" "$LINK"
-  systemctl --user daemon-reload >/dev/null 2>&1 || true
 }
 
 # shortcut: download only, no build from source; without it the xwayland-satellite package stays.

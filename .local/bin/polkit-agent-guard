@@ -20,8 +20,10 @@ import time
 
 # Tried in order; missing ones are skipped.
 FALLBACKS = [
-    ["/usr/lib/hyprpolkitagent/hyprpolkitagent"],
     ["/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"],
+    ["/usr/libexec/polkit-gnome-authentication-agent-1"],
+    ["/usr/lib/hyprpolkitagent/hyprpolkitagent"],
+    ["/usr/bin/hyprpolkitagent"],
     ["/usr/lib/polkit-kde-authentication-agent-1"],
     ["/usr/lib/mate-polkit/polkit-mate-authentication-agent-1"],
 ]

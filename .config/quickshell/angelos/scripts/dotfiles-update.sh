@@ -111,15 +111,27 @@ find_repo() {
 }
 
 # the packages a shell runs on; changed ones mean the running shell is the old build
-qt_packages() { pacman -Q quickshell quickshell-git qt6-base qt6-declarative qt6-wayland 2>/dev/null || true; }
+qt_packages() {
+  if command -v xbps-query >/dev/null 2>&1; then
+    xbps-query -s "qt6-" 2>/dev/null || true
+  else
+    pacman -Q quickshell quickshell-git qt6-base qt6-declarative qt6-wayland 2>/dev/null || true
+  fi
+}
 
-# pacman -Syu as root, before the snapshot: packages can't be put back by --restore,
+# system upgrade as root, before the snapshot: packages can't be put back by --restore,
 # so a failure here stops the update with angelOS untouched
 system_upgrade() {
   [[ "$SYSTEM_UPGRADE" == 1 ]] || { say "$(_ "SYSTEM_UPGRADE=0: the system is not updated" "SYSTEM_UPGRADE=0: система не обновляется")"; return 0; }
-  command -v pacman >/dev/null || { say "$(_ "pacman not found: only angelOS is updated" "pacman не найден: обновляется только angelOS")"; return 0; }
+  local is_xbps=0
+  if command -v xbps-install >/dev/null 2>&1; then
+    is_xbps=1
+  elif ! command -v pacman >/dev/null 2>&1; then
+    say "$(_ "no package manager found: only angelOS is updated" "менеджер пакетов не найден: обновляется только angelOS")"
+    return 0
+  fi
   local root=() log code why n before after qt=0
-  if [[ -e "$PACMAN_DB/db.lck" ]]; then
+  if [[ "$is_xbps" == 0 && -e "$PACMAN_DB/db.lck" ]]; then
     fail_early system "$(_ "another package manager is running ($PACMAN_DB/db.lck) — wait for it to finish and press Update again. Nothing changed" \
                            "сейчас работает другой менеджер пакетов ($PACMAN_DB/db.lck) — дождись, пока он закончит, и нажми «Обновить» ещё раз. Ничего не менялось")" 8
   fi
@@ -131,14 +143,24 @@ system_upgrade() {
   elif [[ -t 0 ]] && command -v sudo >/dev/null; then
     root=(sudo)
   else
-    fail_early system "$(_ "neither pkexec (polkit) nor sudo in a terminal: the system can't be updated, so angelOS was not either. Run sudo pacman -Syu, then update again" \
-                           "нет ни pkexec (polkit), ни sudo в терминале: систему не обновить, поэтому и angelOS не обновлялся. Выполни sudo pacman -Syu и обнови снова")" 8
+    local cmd="sudo pacman -Syu"
+    ((is_xbps)) && cmd="sudo xbps-install -Suy"
+    fail_early system "$(_ "neither pkexec (polkit) nor sudo in a terminal: the system can't be updated, so angelOS was not either. Run $cmd, then update again" \
+                           "нет ни pkexec (polkit), ни sudo в терминале: систему не обновить, поэтому и angelOS не обновлялся. Выполни $cmd и обнови снова")" 8
   fi
-  say "$(_ "updating the system first (pacman -Syu) — it asks for the admin password" "сначала обновляю систему (pacman -Syu) — попросит пароль администратора")"
+  if ((is_xbps)); then
+    say "$(_ "updating the system first (xbps-install -Suy) — it asks for the admin password" "сначала обновляю систему (xbps-install -Suy) — попросит пароль администратора")"
+  else
+    say "$(_ "updating the system first (pacman -Syu) — it asks for the admin password" "сначала обновляю систему (pacman -Syu) — попросит пароль администратора")"
+  fi
   before="$(qt_packages)"
   log="$(mktemp)"
   code=0
-  "${root[@]}" pacman -Syu --noconfirm --color never </dev/null 2>&1 | tee "$log" || code="${PIPESTATUS[0]}"
+  if ((is_xbps)); then
+    "${root[@]}" xbps-install -Suy </dev/null 2>&1 | tee "$log" || code="${PIPESTATUS[0]}"
+  else
+    "${root[@]}" pacman -Syu --noconfirm --color never </dev/null 2>&1 | tee "$log" || code="${PIPESTATUS[0]}"
+  fi
   if ((code != 0)); then
     why="$(sed -n 's/^error: //p' "$log" | tail -n 1)"
     rm -f "$log"
@@ -147,10 +169,16 @@ system_upgrade() {
       fail_early system "$(_ "the admin password was not given, so the system and angelOS stay as they are. Press Update again and enter the password" \
                              "пароль администратора не введён — система и angelOS остались как были. Нажми «Обновить» ещё раз и введи пароль")" 8
     fi
-    fail_early system "$(_ "the system update (pacman -Syu) stopped${why:+: $why}. angelOS was not updated: its new version may need the new packages. Update the system in a terminal (sudo pacman -Syu), then press Update again" \
-                           "обновление системы (pacman -Syu) остановилось${why:+: $why}. angelOS не обновлялся: новой версии могут быть нужны новые пакеты. Обнови систему в терминале (sudo pacman -Syu) и нажми «Обновить» ещё раз")" 8
+    local retry_cmd="sudo pacman -Syu"
+    ((is_xbps)) && retry_cmd="sudo xbps-install -Suy"
+    fail_early system "$(_ "the system update stopped${why:+: $why}. angelOS was not updated: its new version may need the new packages. Update the system in a terminal ($retry_cmd), then press Update again" \
+                           "обновление системы остановилось${why:+: $why}. angelOS не обновлялся: новой версии могут быть нужны новые пакеты. Обнови систему в терминале ($retry_cmd) и нажми «Обновить» ещё раз")" 8
   fi
-  n="$(sed -n 's/^Packages (\([0-9]*\)).*/\1/p' "$log" | tail -n 1)"
+  if ((is_xbps)); then
+    n="$(grep -c '^\[\*\]' "$log" 2>/dev/null || true)"
+  else
+    n="$(sed -n 's/^Packages (\([0-9]*\)).*/\1/p' "$log" | tail -n 1)"
+  fi
   rm -f "$log"
   after="$(qt_packages)"
   [[ "$before" == "$after" ]] || qt=1

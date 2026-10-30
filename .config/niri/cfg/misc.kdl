@@ -7,6 +7,7 @@
         QT_QPA_PLATFORM "wayland"
         QT_QPA_PLATFORMTHEME "gtk3"
         QT_WAYLAND_DISABLE_WINDOWDECORATION "1"
+        QML_IMPORT_PATH "@HOME@/.config/quickshell/angelos"
         XDG_CURRENT_DESKTOP "niri"
         XDG_SESSION_TYPE "wayland"
         GDK_BACKEND "wayland"

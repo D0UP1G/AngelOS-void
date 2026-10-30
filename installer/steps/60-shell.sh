@@ -3,21 +3,62 @@
 
 enable_services() {
   [[ "$ENABLE_SERVICES" == 1 ]] || return 0
-  command -v systemctl >/dev/null 2>&1 || { warn "$(_ 'systemctl not found; user services not enabled' 'systemctl не найден; user-сервисы не включены')"; return 0; }
-  # no user session (su from root, a container): enabling still works offline, the files are linked
-  if ! systemctl --user show-environment >/dev/null 2>&1; then
-    export SYSTEMD_OFFLINE=1
-    warn "$(_ 'No user session here: the services are enabled for the next login' 'Здесь нет пользовательской сессии: сервисы включатся со следующего входа')"
-  fi
-  systemctl --user daemon-reload 2>/dev/null || true
-  systemctl --user enable niri-game-mode.service || true
-  # a fast mouse thinned in games: idle until gaming.mouseRate is set (the wizard, Settings → Games)
-  systemctl --user enable mouse-coalesce.service || true
-  # a password dialog even when the shell's own polkit agent is not up (hyprpolkitagent as the fallback)
-  [[ -f "$HOME_DIR/.config/systemd/user/polkit-agent-guard.service" ]] &&
-    { systemctl --user enable polkit-agent-guard.service || true; }
-  if [[ -x "$HOME_DIR/.local/bin/voxtype" ]]; then
-    systemctl --user enable voxtype.service voxtype-indicator.service || true
+
+  if [[ "$PKG_MANAGER" == xbps ]]; then
+    command -v runsvdir &>/dev/null || {
+      warn "$(_ 'runsvdir not found; user services not enabled' \
+               'runsvdir не найден; user-сервисы не включены')"
+      return 0
+    }
+    local svc_dir="$HOME_DIR/.config/runit/sv"
+    local enabled_dir="$HOME_DIR/.local/share/runit/service"
+    mkdir -p "$enabled_dir"
+
+    enable_runit_svc() {
+      local name="$1"
+      local src="$svc_dir/$name"
+      [[ -d "$src" ]] || return 0
+      chmod +x "$src/run" 2>/dev/null || true
+      [[ -L "$enabled_dir/$name" ]] || ln -sfn "$src" "$enabled_dir/$name"
+      say "$(_ "service enabled: $name" "сервис включён: $name")"
+    }
+
+    enable_runit_svc niri-game-mode
+    enable_runit_svc mouse-coalesce
+    [[ -d "$svc_dir/polkit-agent-guard" ]] && enable_runit_svc polkit-agent-guard
+    if [[ -x "$HOME_DIR/.local/bin/voxtype" ]]; then
+      enable_runit_svc voxtype
+      enable_runit_svc voxtype-indicator
+    fi
+
+    # runsvdir нужно запустить из сессии niri
+    local niri_user_cfg="$HOME_DIR/.config/niri/cfg/user.kdl"
+    mkdir -p "$(dirname "$niri_user_cfg")"
+    if ! grep -q "runsvdir" "$niri_user_cfg" 2>/dev/null; then
+      cat >> "$niri_user_cfg" <<'KDL'
+
+// angelOS runit user services (Void Linux)
+spawn-sh-at-startup "runsvdir -P \"$HOME/.local/share/runit/service\""
+KDL
+      say "$(_ 'Added runsvdir to niri startup' 'runsvdir добавлен в автозапуск niri')"
+    fi
+  else
+    command -v systemctl >/dev/null 2>&1 || { warn "$(_ 'systemctl not found; user services not enabled' 'systemctl не найден; user-сервисы не включены')"; return 0; }
+    # no user session (su from root, a container): enabling still works offline, the files are linked
+    if ! systemctl --user show-environment >/dev/null 2>&1; then
+      export SYSTEMD_OFFLINE=1
+      warn "$(_ 'No user session here: the services are enabled for the next login' 'Здесь нет пользовательской сессии: сервисы включатся со следующего входа')"
+    fi
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable niri-game-mode.service || true
+    # a fast mouse thinned in games: idle until gaming.mouseRate is set (the wizard, Settings → Games)
+    systemctl --user enable mouse-coalesce.service || true
+    # a password dialog even when the shell's own polkit agent is not up (hyprpolkitagent as the fallback)
+    [[ -f "$HOME_DIR/.config/systemd/user/polkit-agent-guard.service" ]] &&
+      { systemctl --user enable polkit-agent-guard.service || true; }
+    if [[ -x "$HOME_DIR/.local/bin/voxtype" ]]; then
+      systemctl --user enable voxtype.service voxtype-indicator.service || true
+    fi
   fi
 }
 
@@ -114,6 +155,7 @@ install_shell() {
 # apps keep the old one mapped). MINIMIZE_HOOK=0, or `extras/minimize-hook/install.sh --remove`
 # (minimize-hook.off), leaves it out. No compiler: a warning, nothing else.
 install_minimize_hook() {
+  [[ "$PKG_MANAGER" == xbps ]] && return 0
   [[ "$DESKTOP_SHELL" == angelos && "$MINIMIZE_HOOK" == 1 ]] || return 0
   [[ -e "$HOME_DIR/.config/angelos/minimize-hook.off" ]] && return 0
   local src="$ROOT/.config/quickshell/angelos/extras/minimize-hook" out="$HOME_DIR/.local/lib/angelos"

@@ -274,7 +274,8 @@ def base_packages(repo):
     out = []
     if not repo:
         return out
-    for name in BASE_LISTS:
+    lists = ("void.txt",) if shutil.which("xbps-install") and (Path(repo) / "packages" / "void.txt").is_file() else BASE_LISTS
+    for name in lists:
         try:
             lines = (Path(repo) / "packages" / name).read_text().splitlines()
         except OSError:
@@ -784,7 +785,10 @@ def install_one(a, via, aur_gone):
         subprocess.run(cmd + names)
     elif via == "flatpak":
         if not shutil.which("flatpak"):
-            subprocess.run(root("pacman", "-S", "--needed", "--noconfirm", "flatpak"))
+            if shutil.which("xbps-install"):
+                subprocess.run(root("xbps-install", "-y", "flatpak"))
+            else:
+                subprocess.run(root("pacman", "-S", "--needed", "--noconfirm", "flatpak"))
         subprocess.run(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub",
                         "https://dl.flathub.org/repo/flathub.flatpakrepo"])
         subprocess.run(["flatpak", "install", "--user", "-y", "--noninteractive", "flathub", a["flatpak"]])

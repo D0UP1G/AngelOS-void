@@ -5,11 +5,15 @@
 bootstrap_tui() {
   ((INTERACTIVE)) || return 0
   if [[ "${NO_TUI:-0}" != 1 ]] && ! command -v gum >/dev/null 2>&1 && [[ "$SKIP_PACKAGES" != 1 ]] &&
-     command -v pacman >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+     command -v sudo >/dev/null 2>&1; then
     say "$(_ "The installer's menus and pictures are drawn by gum and chafa (two small tools from the official repositories)." \
              'Меню и картинки установщика рисуют gum и chafa (две маленькие утилиты из официальных репозиториев).')"
     if confirm "$(_ 'Install them now? (No = plain text prompts)' 'Поставить их сейчас? (Нет — обычные текстовые вопросы)')" y; then
-      sudo pacman -S --needed gum chafa || warn "$(_ 'gum did not install: plain prompts it is' 'gum не установился: будут обычные вопросы')"
+      if [[ "$PKG_MANAGER" == xbps ]]; then
+        sudo xbps-install -y gum chafa || warn "$(_ 'gum did not install: plain prompts it is' 'gum не установился: будут обычные вопросы')"
+      elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --needed gum chafa || warn "$(_ 'gum did not install: plain prompts it is' 'gum не установился: будут обычные вопросы')"
+      fi
     fi
   fi
   tui_detect
@@ -69,9 +73,12 @@ summary() {
     say "$(_ "Your changes kept in $N_PARKED config file(s); their new versions: ${PARKED_DIR/#$HOME_DIR/\~}/ (OVERWRITE_CONFIGS=1 replaces them, with a backup)" \
              "Твои изменения сохранены в $N_PARKED файл(ах) конфигов; их новые версии: ${PARKED_DIR/#$HOME_DIR/\~}/ (OVERWRITE_CONFIGS=1 заменит их, с бэкапом)")"
   fi
-  ((${#PKG_FAILED[@]} == 0)) ||
-    warn "$(_ "Packages that did not install: ${PKG_FAILED[*]}  →  sudo pacman -S ${PKG_FAILED[*]}" \
-              "Не поставились пакеты: ${PKG_FAILED[*]}  →  sudo pacman -S ${PKG_FAILED[*]}")"
+  if ((${#PKG_FAILED[@]})); then
+    local retry_cmd="sudo pacman -S ${PKG_FAILED[*]}"
+    [[ "$PKG_MANAGER" == xbps ]] && retry_cmd="sudo xbps-install ${PKG_FAILED[*]}"
+    warn "$(_ "Packages that did not install: ${PKG_FAILED[*]}  →  $retry_cmd" \
+              "Не поставились пакеты: ${PKG_FAILED[*]}  →  $retry_cmd")"
+  fi
   say "$(_ 'Keyboard' 'Клавиатура'): ${KB_LAYOUTS}${KB_OPTIONS:+  ($KB_OPTIONS)} — $(_ 'layouts, monitors and the look: Settings (Mod+S)' 'раскладки, мониторы и вид: Настройки (Mod+S)')"
   if [[ "$SDDM_STATUS" != skipped ]]; then
     say "$(_ "Login screen: SDDM + $SDDM_THEME ($SDDM_STATUS); it appears after a reboot" \
@@ -84,7 +91,7 @@ summary() {
   # from Settings runs inside niri already: nothing to say)
   ((INTERACTIVE)) || return 0
   local how
-  if systemctl is-enabled display-manager.service >/dev/null 2>&1; then
+  if { [[ "$PKG_MANAGER" == xbps ]] && [[ -e /var/service/sddm ]]; } || { [[ "$PKG_MANAGER" != xbps ]] && systemctl is-enabled display-manager.service >/dev/null 2>&1; }; then
     how="$(_ 'reboot and pick niri on the login screen — see you on the desktop' 'перезагрузись и выбери niri на экране входа — увидимся на рабочем столе')"
   else
     how="$(_ 'no login screen here: log in on a console (Ctrl+Alt+F2) and type niri-session' 'экрана входа нет: войди в консоли (Ctrl+Alt+F2) и набери niri-session')"

@@ -18,12 +18,44 @@ sddm_check_modules() {
   local qml=/usr/lib/qt6/qml missing=()
   [[ -d "$qml/QtQuick" ]] || missing+=(qt6-declarative)
   ((${#missing[@]})) || return 0
-  warn "$(_ "The SDDM theme needs: ${missing[*]}  →  sudo pacman -S ${missing[*]}" \
-           "Теме SDDM не хватает: ${missing[*]}  →  sudo pacman -S ${missing[*]}")"
+  local cmd="sudo pacman -S ${missing[*]}"
+  [[ "$PKG_MANAGER" == xbps ]] && cmd="sudo xbps-install ${missing[*]}"
+  warn "$(_ "The SDDM theme needs: ${missing[*]}  →  $cmd" \
+           "Теме SDDM не хватает: ${missing[*]}  →  $cmd")"
 }
 
 # Make SDDM the display manager that starts at boot.
 sddm_enable() {
+  if [[ "$PKG_MANAGER" == xbps ]]; then
+    # Void: runit
+    local svdir="${SYSROOT}/var/service"
+    local etcsv="${SYSROOT}/etc/sv"
+    for candidate in gdm lightdm ly greetd emptty; do
+      if [[ -e "$svdir/$candidate" ]]; then
+        say "$(_ "Disabling $candidate" "Отключаю $candidate")"
+        as_root rm -f "$svdir/$candidate" || true
+      fi
+    done
+    [[ -d "$etcsv/sddm" ]] || {
+      warn "$(_ 'sddm service not found in /etc/sv/' 'Сервис sddm не найден в /etc/sv/')"
+      return 0
+    }
+    [[ -e "$svdir/sddm" ]] && { say "$(_ 'SDDM already enabled' 'SDDM уже включён')"; return 0; }
+    as_root ln -s /etc/sv/sddm "$svdir/" || {
+      warn "$(_ 'Could not enable SDDM' 'Не удалось включить SDDM')"
+      return 0
+    }
+    # Void Linux: wrap niri session in dbus-run-session (no systemd --user)
+    local niri_sess="${SYSROOT}/usr/share/wayland-sessions/niri.desktop"
+    if [[ -f "$niri_sess" ]] && grep -q '^Exec=/usr/bin/niri --session' "$niri_sess"; then
+      as_root sed -i 's|^Exec=/usr/bin/niri --session|Exec=dbus-run-session niri --session|' "$niri_sess" 2>/dev/null || true
+    fi
+
+    SDDM_STATUS=enabled
+    say "$(_ 'SDDM will start on the next boot' 'SDDM запустится при следующей загрузке')"
+    return 0
+  fi
+
   local current
   command -v systemctl >/dev/null 2>&1 || { warn "$(_ 'systemctl not found; SDDM not enabled' 'systemctl не найден; SDDM не включён')"; return 0; }
 

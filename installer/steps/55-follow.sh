@@ -37,19 +37,29 @@ PY
 follow_system() {
   [[ "$FOLLOW_SYSTEM" == 1 && -z "$SYSROOT" && "$OWNER_HOME" == 0 && "$DESKTOP_SHELL" == angelos ]] || return 0
   [[ "$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)" == "$HOME_DIR" ]] || return 0
-  command -v pacman >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 || return 0
+  [[ -n "$PKG_MANAGER" ]] && command -v python3 >/dev/null 2>&1 || return 0
   local sddm_py="$ROOT/.config/quickshell/angelos/scripts/sddm-theme.py" sddm_src="$ROOT/.config/quickshell/angelos/extras/sddm/angelos"
   local pkgs=() fish="" theme="" applied="" built="" root_sddm="" stamp="$STATE_DIR/sddm-theme.sha256" hash cur look="" pal="" hid="" mem=""
-  # what the user said no to stays out (an unattended update keeps the defaults: yes)
-  local -a lists=(pacman.txt angelos.txt)
-  [[ "$INSTALL_TOOLS" == 1 ]] && lists+=(tools.txt)
-  [[ "$FISH_DEFAULT" == 1 ]] && lists+=(fish.txt)
-  command -v sddm >/dev/null 2>&1 && [[ "$INSTALL_SDDM" == 1 ]] && lists+=(sddm.txt)
-  # the gaming edition, once it was set up here (scripts/game-setup.sh): its list is the shell's
-  [[ -f "$STATE_DIR/gaming" ]] && lists+=(../.config/quickshell/angelos/data/gaming-packages.txt)
-  # base packages missing here that the repositories have
-  mapfile -t pkgs < <(cd "$ROOT/packages" && cat "${lists[@]}" 2>/dev/null | sed 's/#.*//' | tr -s ' \t' '\n' | grep -v '^$' | sort -u | not_removed |
-                        xargs -r pacman -T 2>/dev/null | xargs -r -n1 sh -c 'pacman -Si "$0" >/dev/null 2>&1 && echo "$0"')
+  if [[ "$PKG_MANAGER" == xbps ]]; then
+    local -a lists=(void.txt)
+    local all_pkgs=()
+    mapfile -t all_pkgs < <(cd "$ROOT/packages" && cat "${lists[@]}" 2>/dev/null | sed 's/#.*//' | tr -s ' \t' '\n' | grep -v '^$' | sort -u | not_removed)
+    for p in "${all_pkgs[@]}"; do
+      pkg_is_installed "$p" && continue
+      pkg_in_repos "$p" && pkgs+=("$p")
+    done
+  else
+    # what the user said no to stays out (an unattended update keeps the defaults: yes)
+    local -a lists=(pacman.txt angelos.txt)
+    [[ "$INSTALL_TOOLS" == 1 ]] && lists+=(tools.txt)
+    [[ "$FISH_DEFAULT" == 1 ]] && lists+=(fish.txt)
+    command -v sddm >/dev/null 2>&1 && [[ "$INSTALL_SDDM" == 1 ]] && lists+=(sddm.txt)
+    # the gaming edition, once it was set up here (scripts/game-setup.sh): its list is the shell's
+    [[ -f "$STATE_DIR/gaming" ]] && lists+=(../.config/quickshell/angelos/data/gaming-packages.txt)
+    # base packages missing here that the repositories have
+    mapfile -t pkgs < <(cd "$ROOT/packages" && cat "${lists[@]}" 2>/dev/null | sed 's/#.*//' | tr -s ' \t' '\n' | grep -v '^$' | sort -u | not_removed |
+                          xargs -r pacman -T 2>/dev/null | xargs -r -n1 sh -c 'pacman -Si "$0" >/dev/null 2>&1 && echo "$0"')
+  fi
   # fish: bash or sh as the login shell, not asked before
   [[ "$FISH_DEFAULT" == 1 ]] && case "$(basename "$(getent passwd "$(id -un)" | cut -d: -f7)")" in
     bash|sh) python3 - "$STATE_DIR/apps.json" <<'PY' && fish=1 ;;
@@ -109,7 +119,11 @@ PY
     pkgs="$1"; user="$2"; fish="$3"; src="$4"; sddm="$5"; uid="$6"; hid="$7"; mem="$8"; rc=0
     if [ -n "$pkgs" ]; then
       # shellcheck disable=SC2086
-      pacman -Syu --needed --noconfirm $pkgs || rc=1
+      if command -v xbps-install >/dev/null 2>&1; then
+        xbps-install -y $pkgs || rc=1
+      else
+        pacman -Syu --needed --noconfirm $pkgs || rc=1
+      fi
     fi
     if [ -n "$fish" ] && f="$(command -v fish)"; then
       grep -qx "$f" /etc/shells || echo "$f" >>/etc/shells

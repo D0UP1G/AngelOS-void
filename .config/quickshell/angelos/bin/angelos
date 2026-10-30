@@ -78,6 +78,7 @@ UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT"
 shell_env() {
   mode="$(cat "$CONF_DIR/renderer" 2>/dev/null | tr -cd 'a-z')"
   export ANGELOS_PRE_QT_PLUGIN_PATH="${QT_PLUGIN_PATH:-}" ANGELOS_PRE_QSG_RHI_BACKEND="${QSG_RHI_BACKEND:-}"
+  export QML_IMPORT_PATH="${QML_IMPORT_PATH:+$QML_IMPORT_PATH:}$SHELL_DIR"
   # the shell's own windows (Settings…) draw their own title bars: never Qt's frame around them,
   # also where the apps draw theirs (Golden Gate turns niri's prefer-no-csd off)
   export ANGELOS_PRE_QT_WAYLAND_DISABLE_WINDOWDECORATION="${QT_WAYLAND_DISABLE_WINDOWDECORATION:-}" QT_WAYLAND_DISABLE_WINDOWDECORATION=1

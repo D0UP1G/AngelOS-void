@@ -410,6 +410,10 @@ destination() {
     .config/quickshell/angelos/*)
       [[ "$DESKTOP_SHELL" != none ]] || return 0 ;;
     .config/systemd/user/*)
+      [[ "$PKG_MANAGER" != xbps ]] || return 0
+      [[ "$ENABLE_SERVICES" == 1 ]] || return 0 ;;
+    .config/runit/*)
+      [[ "$PKG_MANAGER" == xbps ]] || return 0
       [[ "$ENABLE_SERVICES" == 1 ]] || return 0 ;;
     .config/voxtype/*)
       [[ "$INSTALL_VOXTYPE" == 1 || -x "$HOME_DIR/.local/bin/voxtype" ]] || return 0 ;;
@@ -528,12 +532,60 @@ KDL
 # alias ll 'eza -l'
 FISH
   fi
+
+  # Void Linux: seatd and session D-Bus in ~/.profile
+  if [[ "$PKG_MANAGER" == xbps ]]; then
+    local profile="$HOME_DIR/.profile"
+    if [[ ! -f "$profile" ]] || ! grep -q "LIBSEAT_BACKEND" "$profile"; then
+      cat >>"$profile" <<'PROFILE'
+# ~/.profile: executed by login shells and display managers (e.g. SDDM wayland-session)
+
+# Use seatd for direct DRM/KMS access on Void Linux
+export LIBSEAT_BACKEND="seatd"
+
+# On Void Linux (no systemd --user), SDDM launches Wayland sessions directly without a session D-Bus.
+# Wrap the session with dbus-run-session so all desktop services (Quickshell, portals, polkit, pipewire)
+# share a unified D-Bus session bus.
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -n "$SDDM_USER_SHELL" ] && command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session "$0" "$@"
+fi
+
+# User bin path
+case ":$PATH:" in
+    *:"$HOME/.local/bin":*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+PROFILE
+    fi
+    local bprofile="$HOME_DIR/.bash_profile"
+    if [[ -f "$bprofile" ]] && ! grep -q '\.profile' "$bprofile"; then
+      printf '\n[ -f "$HOME/.profile" ] && . "$HOME/.profile"\n' >>"$bprofile"
+    fi
+  fi
   return 0
+}
+
+install_adw_theme() {
+  [[ "$PKG_MANAGER" == xbps ]] || return 0
+  [[ -d /usr/share/themes/adw-gtk3 || -d "$HOME_DIR/.local/share/themes/adw-gtk3" ]] && return 0
+  say "$(_ 'Downloading adw-gtk3 theme…' 'Скачиваю тему adw-gtk3…')"
+  local url
+  url=$(curl -sL https://api.github.com/repos/lassekongo83/adw-gtk3/releases/latest \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(a["browser_download_url"] for a in d.get("assets", []) if a["name"].endswith(".tar.xz")))' 2>/dev/null) || return 0
+  [[ -n "$url" ]] || {
+    warn "$(_ 'Could not determine adw-gtk3 download URL' 'Не удалось определить URL для adw-gtk3')"
+    return 0
+  }
+  mkdir -p "$HOME_DIR/.local/share/themes"
+  curl -fsSL "$url" | tar -xJ -C "$HOME_DIR/.local/share/themes/" 2>/dev/null \
+    && say "$(_ 'adw-gtk3 theme installed to ~/.local/share/themes/' 'Тема adw-gtk3 установлена в ~/.local/share/themes/')" \
+    || warn "$(_ 'Could not download adw-gtk3 theme' 'Не удалось скачать тему adw-gtk3')"
 }
 
 install_assets() {
   [[ "$MODE" == full ]] || return 0
   say "$(_ 'Installing fonts and icons…' 'Установка шрифтов и иконок…')"
+  install_adw_theme
   if [[ -d "$ROOT/.local/share" ]]; then
     mkdir -p -- "$HOME_DIR/.local/share"
     cp -au -- "$ROOT/.local/share/." "$HOME_DIR/.local/share/"

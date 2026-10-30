@@ -9,6 +9,18 @@ wizard_next() {
   [[ "${DESKTOP_SHELL:-angelos}" == angelos && "$MODE" == full ]]
 }
 
+detect_current_dm() {
+  if [[ "$PKG_MANAGER" == xbps ]]; then
+    local dm=""
+    for candidate in gdm lightdm ly greetd emptty sddm; do
+      [[ -e "/var/service/$candidate" ]] && { dm="$candidate"; break; }
+    done
+    echo "$dm"
+  else
+    basename "$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)" .service 2>/dev/null
+  fi
+}
+
 # Asked here: only what the system needs before the first login (the rest is the setup wizard's).
 # The profile (DOTFILES_MODE=tech) and plain niri (DESKTOP_SHELL=none) are for those who know
 # them: set from outside, never asked — whoever runs this came for angelOS
@@ -34,7 +46,7 @@ ask_profile() {
   fi
   if ! given INSTALL_SDDM; then
     local dm
-    dm="$(basename "$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)" .service 2>/dev/null)"
+    dm="$(detect_current_dm)"
     if [[ -n "$dm" && "$dm" != sddm ]]; then
       # GDM, plasmalogin and the others list the niri session already: keeping them is the default
       ui_confirm "$(_ "The angelOS login screen (SDDM) instead of your $dm? ($dm is turned off; niri is in its list either way)" \
@@ -128,12 +140,18 @@ for _, name, label in sorted(rows):
 review() {
   ((INTERACTIVE)) || return 0
   local lines=() mb="" n=0 packs=0 id count size en ru dm answer
-  if [[ "$SKIP_PACKAGES" != 1 ]] && command -v pacman >/dev/null 2>&1; then
+  if [[ "$SKIP_PACKAGES" != 1 ]]; then
     wanted_packages
-    n="$(printf '%s\n' "${PACKAGES[@]}" | xargs -r pacman -T 2>/dev/null | wc -l || true)"
-    mb="$(pacman -Sp --needed --print-format '%s' "${PACKAGES[@]}" 2>/dev/null | awk '{s+=$1} END {printf "%d", s/1048576}' || true)"
-    lines+=("$(_ "• the system is updated (pacman -Syu) and $n packages of angelOS come${mb:+ (~$mb MB)}" \
-                 "• система обновится (pacman -Syu) и встанут $n пакетов angelOS${mb:+ (~$mb МБ)}")")
+    if [[ "$PKG_MANAGER" == xbps ]]; then
+      n="${#PACKAGES[@]}"
+      lines+=("$(_ "• the system is updated (xbps-install -Suy) and $n packages of angelOS come" \
+                   "• система обновится (xbps-install -Suy) и встанут $n пакетов angelOS")")
+    elif command -v pacman >/dev/null 2>&1; then
+      n="$(printf '%s\n' "${PACKAGES[@]}" | xargs -r pacman -T 2>/dev/null | wc -l || true)"
+      mb="$(pacman -Sp --needed --print-format '%s' "${PACKAGES[@]}" 2>/dev/null | awk '{s+=$1} END {printf "%d", s/1048576}' || true)"
+      lines+=("$(_ "• the system is updated (pacman -Syu) and $n packages of angelOS come${mb:+ (~$mb MB)}" \
+                   "• система обновится (pacman -Syu) и встанут $n пакетов angelOS${mb:+ (~$mb МБ)}")")
+    fi
   fi
   [[ "$MODE" == full ]] && for id in "${WALLPAPER_LIST[@]}"; do
     IFS='|' read -r id count size en ru <<<"$id"
@@ -144,7 +162,7 @@ review() {
     lines+=("$(_ "• Arch: the author's repositories [cachyos] (below Arch's own) and [multilib], with CachyOS's signing key" \
                  "• Arch: репозитории автора [cachyos] (ниже арчевых) и [multilib], с ключом подписи CachyOS")")
   if [[ "$INSTALL_SDDM" == 1 ]]; then
-    dm="$(basename "$(readlink /etc/systemd/system/display-manager.service 2>/dev/null)" .service 2>/dev/null)"
+    dm="$(detect_current_dm)"
     lines+=("$(_ "• the angelOS login screen (SDDM)${dm:+, $dm is turned off}" "• экран входа angelOS (SDDM)${dm:+, $dm выключится}")")
   fi
   [[ "$FISH_DEFAULT" == 1 ]] && [[ "$(getent passwd "$(id -un)" | cut -d: -f7)" != */fish ]] &&

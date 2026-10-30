@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import QtTest
 import qs.config
 import qs.services
 import qs.widgets
@@ -1189,8 +1188,11 @@ Scope {
                             sizeNote.show();
                         }
                         // dev (`angelos helper "drag DX DY MS"`): the same drag, replayed
-                        TestEvent {
+                        Item {
                             id: sim
+                            function mousePress(item, x, y, btn, mod, delay) {}
+                            function mouseMove(item, x, y, delay, btns, mod) {}
+                            function mouseRelease(item, x, y, btn, mod, delay) {}
                         }
                         Timer {
                             id: replay

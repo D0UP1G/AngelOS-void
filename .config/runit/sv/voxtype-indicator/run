@@ -1,0 +1,3 @@
+#!/bin/sh
+export GDK_BACKEND=wayland
+exec "$HOME/.local/bin/voxtype-indicator" 2>&1
